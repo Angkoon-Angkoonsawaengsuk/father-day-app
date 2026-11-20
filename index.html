@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Happy Father's Day</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Noto Sans Thai", sans-serif; background: #f6f3ee; color: #222; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
+  h1 { text-align: center; font-size: 22px; margin: 8px 0 4px; }
+  .sub { text-align: center; color: #666; margin: 0 0 16px; }
+  .step { display: none; } .step.on { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: #fff; border-radius: 12px; overflow: hidden; cursor: pointer; border: 0; padding: 0;
+          box-shadow: 0 2px 6px rgba(0,0,0,.1); text-align: center; font: inherit; }
+  .card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
+  .card span { display: block; padding: 8px; font-size: 14px; }
+  .preview img { width: 100%; border-radius: 12px; display: block; }
+  .row { display: flex; gap: 10px; justify-content: space-between; margin-top: 12px; }
+  button, .btn { padding: 12px 18px; border: 0; border-radius: 10px; font-size: 16px; cursor: pointer; font: inherit; }
+  .primary { background: #c8102e; color: #fff; } .ghost { background: #e5e1da; }
+  button:disabled { opacity: .6; cursor: default; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal.on { display: flex; }
+  .box { background: #fff; border-radius: 14px; padding: 20px; width: 100%; max-width: 420px; max-height: 95vh; overflow: auto; }
+  .box h3 { margin-top: 0; }
+  label { display: block; font-size: 13px; margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font: inherit; }
+  .apps { display: grid; gap: 10px; margin-top: 12px; }
+  .app { color: #fff; width: 100%; }
+  .line { background: #06c755; } .wa { background: #25d366; } .ms { background: #0084ff; }
+  .msg { font-size: 13px; color: #c8102e; min-height: 18px; margin-top: 8px; }
+  .hint { font-size: 13px; color: #666; }
+  .note { font-size: 12px; color: #777; margin: 12px 0 0; }
+  .note:empty { display: none; }
+  .dl { display: block; text-align: center; margin-top: 12px; font-size: 14px; color: #555; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Happy Father's Day 💛</h1>
+  <p class="sub">Pick a card and send it to your dad</p>
+
+  <!-- Screen 1: pick a card -->
+  <div id="s1" class="step on"><div class="grid" id="grid"></div></div>
+
+  <!-- Screen 2: preview + Share -->
+  <div id="s2" class="step preview">
+    <img id="bigImg" alt="">
+    <div class="row">
+      <button class="ghost" onclick="go('s1')">← Back</button>
+      <button class="primary" onclick="openModal('formModal')">Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- Screen 3: form popup (Tracking 1 + 3) -->
+<div class="modal" id="formModal">
+  <form class="box" id="form">
+    <h3>Before you send</h3>
+    <label for="f-name">Name *</label>
+    <input id="f-name" name="name" required maxlength="100" autocomplete="name">
+    <label for="f-email">Email *</label>
+    <input id="f-email" name="email" type="email" required maxlength="120" autocomplete="email">
+    <label for="f-company">Company *</label>
+    <span id="companySlot"></span>
+    <p class="note" id="privacyNote"></p>
+    <div class="msg" id="formMsg"></div>
+    <div class="row">
+      <button type="button" class="ghost" onclick="closeModal('formModal')">Cancel</button>
+      <button type="submit" class="primary" id="submitBtn">Submit</button>
+    </div>
+  </form>
+</div>
+
+<!-- Screen 4: choose app (Tracking 2) -->
+<div class="modal" id="appModal">
+  <div class="box">
+    <h3>Send with…</h3>
+    <p class="hint" id="appHint"></p>
+    <div class="apps">
+      <button class="app line" onclick="shareVia('LINE')">LINE</button>
+      <button class="app wa"   onclick="shareVia('WhatsApp')">WhatsApp</button>
+      <button class="app ms"   onclick="shareVia('Messenger')">Messenger</button>
+    </div>
+    <div class="msg" id="appMsg"></div>
+    <a class="dl" id="dlLink" download>⬇ Download the picture instead</a>
+    <div class="row"><button class="ghost" onclick="closeModal('appModal')">Close</button></div>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const CONFIG = {
+  // Apps Script web app URL (Deploy > Web app > ends with /exec)
+  API_URL: 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec',
+  DEFAULT_TEXT: "Happy Father's Day, Dad! 💛",
+  // Company: fill this list to show a dropdown; leave it empty [] for a free-text box.
+  COMPANIES: ['Company A', 'Company B', 'Company C', 'Other'],
+  // Shown under the form (PDPA). Leave '' to hide.
+  PRIVACY_NOTE: 'We collect your name, email and company only to measure participation in this campaign. Data will be deleted after the campaign ends.',
+  // Images live next to this file (same origin) so they can be shared as real files.
+  CARDS: [
+    { id: 'card1', title: 'Super Dad',     img: 'cards/card1.jpg' },
+    { id: 'card2', title: 'My Hero',       img: 'cards/card2.jpg' },
+    { id: 'card3', title: 'Thank You Dad', img: 'cards/card3.jpg' },
+    { id: 'card4', title: 'Love You Dad',  img: 'cards/card4.jpg' },
+  ],
+};
+
+/* ================= STATE ================= */
+let card = null;        // selected card
+let file = null;        // prefetched image as File (needed so share() runs instantly on tap)
+let sessionId = null;   // links "submit" and "share" rows together
+let sender = null;      // form data
+let forceLink = false;  // set if file-share fails, so next tap uses link-share
+
+/* ================= SCREEN 1 ================= */
+const grid = document.getElementById('grid');
+CONFIG.CARDS.forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'card';
+  b.innerHTML = '<img loading="lazy" alt=""><span></span>';
+  b.querySelector('img').src = c.img;
+  b.querySelector('span').textContent = c.title;
+  b.onclick = () => selectCard(c);
+  grid.appendChild(b);
+});
+
+// Company field: dropdown if COMPANIES is set, otherwise free text
+const slot = document.getElementById('companySlot');
+if (CONFIG.COMPANIES.length) {
+  const s = document.createElement('select');
+  s.id = 'f-company'; s.name = 'company'; s.required = true;
+  s.add(new Option('— select —', ''));
+  CONFIG.COMPANIES.forEach(c => s.add(new Option(c, c)));
+  slot.replaceWith(s);
+} else {
+  slot.outerHTML = '<input id="f-company" name="company" required maxlength="100" autocomplete="organization">';
+}
+document.getElementById('privacyNote').textContent = CONFIG.PRIVACY_NOTE;
+
+function selectCard(c) {
+  card = c; file = null; forceLink = false;
+  document.getElementById('bigImg').src = c.img;
+  document.getElementById('dlLink').href = c.img;
+  go('s2');
+  // Prefetch now: browsers (esp. iOS Safari) reject share() if we await a download after the tap.
+  fetch(c.img).then(r => r.blob()).then(blob => {
+    if (card !== c) return;
+    const ext = blob.type === 'image/png' ? '.png' : '.jpg';
+    file = new File([blob], 'fathers-day-' + c.id + ext, { type: blob.type || 'image/jpeg' });
+  }).catch(() => { file = null; });
+}
+
+/* ================= NAV ================= */
+function go(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.toggle('on', s.id === id));
+  window.scrollTo(0, 0);
+}
+function openModal(id)  { document.getElementById(id).classList.add('on'); }
+function closeModal(id) { document.getElementById(id).classList.remove('on'); }
+
+/* ================= LOGGING → Apps Script → Google Sheet ================= */
+// text/plain keeps this a "simple" request: no CORS preflight, which Apps Script can't answer.
+async function send(payload) {
+  const res = await fetch(CONFIG.API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...payload, sessionId, cardId: card && card.id, userAgent: navigator.userAgent }),
+  });
+  const out = await res.json();
+  if (!out.ok) throw new Error(out.error || 'Save failed');
+  return out;
+}
+
+/* ================= SCREEN 3: SUBMIT ================= */
+document.getElementById('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('formMsg');
+  msg.textContent = '';
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  sender = Object.fromEntries(new FormData(e.target));
+  sender.name = sender.name.trim();
+  sender.email = sender.email.trim().toLowerCase();
+  sessionId = (crypto.randomUUID && crypto.randomUUID()) ||
+              Date.now().toString(36) + Math.random().toString(36).slice(2);
+  try {
+    await send({ event: 'submit', ...sender });
+    closeModal('formModal');
+    document.getElementById('appHint').textContent = canShareFile()
+      ? 'Tap your app, then choose it (and your dad) in the share menu.'
+      : 'Your browser can only send a link to the picture. On a phone you can send the picture itself.';
+    openModal('appModal');
+  } catch (err) {
+    msg.textContent = 'Could not save. Please check your connection and try again.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+});
+
+/* ================= SCREEN 4: SHARE ================= */
+function canShareFile() {
+  return !forceLink && file && navigator.canShare && navigator.canShare({ files: [file] });
+}
+
+function shareText() {
+  return CONFIG.DEFAULT_TEXT + '\n— ' + sender.name;
+}
+
+function logShare(app, method, status) {
+  send({ event: 'share', app, method, status }).catch(() => {});
+}
+
+function shareVia(app) {
+  const appMsg = document.getElementById('appMsg');
+  appMsg.textContent = '';
+
+  // A) Real picture via the phone's share sheet. Must be called directly in the tap — no awaits before it.
+  if (canShareFile()) {
+    navigator.share({ files: [file], text: shareText() })
+      .then(() => logShare(app, 'file', 'shared'))
+      .catch(err => {
+        if (err.name === 'AbortError') { logShare(app, 'file', 'cancelled'); return; }
+        logShare(app, 'file', 'error:' + err.name);
+        forceLink = true;
+        appMsg.textContent = 'Could not attach the picture. Tap the app again to send a link instead.';
+      });
+    return;
+  }
+
+  // B) Fallback: link to the picture (desktop / unsupported browsers)
+  const imgUrl = new URL(card.img, location.href).href;
+  const text = encodeURIComponent(shareText() + '\n' + imgUrl);
+  if (app === 'LINE')      window.open('https://line.me/R/share?text=' + text, '_blank');
+  if (app === 'WhatsApp')  window.open('https://wa.me/?text=' + text, '_blank');
+  if (app === 'Messenger') location.href = 'fb-messenger://share/?link=' + encodeURIComponent(imgUrl); // mobile app only
+  logShare(app, 'link', 'opened');
+}
+</script>
+</body>
+</html>
